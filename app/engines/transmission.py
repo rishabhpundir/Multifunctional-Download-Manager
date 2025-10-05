@@ -57,7 +57,7 @@ async def get_status(t_hash: str):
             "torrent-get",
             {
                 "ids": [t_hash],
-                "fields": ["percentDone", "isFinished", "downloadDir", "name"],
+                "fields": ["percentDone","isFinished","downloadDir","name","rateDownload"],
             },
         )
         arr = j["arguments"]["torrents"]

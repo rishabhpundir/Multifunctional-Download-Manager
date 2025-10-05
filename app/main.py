@@ -10,6 +10,9 @@ from .models import Download
 from .engines import aria2, transmission
 from .postprocess import move_and_enrich
 from . import jellyfin
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DOWNLOADS_ROOT = os.getenv("DOWNLOADS_ROOT")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT")
@@ -42,7 +45,7 @@ class AddPayload(BaseModel):
     @field_validator("kind")
     @classmethod
     def validate_kind(cls, v):
-        if v not in {"movie", "tv"}:
+        if v not in {"movies", "tvshows"}:
             raise ValueError("kind must be 'movie' or 'tv'")
         return v
 
@@ -54,17 +57,21 @@ async def add_job(p: AddPayload, bg: BackgroundTasks):
     - Default: use aria2 for both magnets and HTTP(S).
     - If engine=transmission and source is magnet, use Transmission instead.
     """
-    target_dir = Path(os.path.join(DOWNLOADS_ROOT, p.kind))
-    os.makedirs(target_dir, exist_ok=True)
+    try:
+        target_dir = os.path.join(DOWNLOADS_ROOT, p.kind)
+        os.makedirs(target_dir, exist_ok=True)
 
-    async with Session() as s:
-        d = Download(source=p.source, engine=p.engine, kind=p.kind, status="starting")
-        s.add(d)
-        await s.commit()
-        await s.refresh(d)
+        async with Session() as s:
+            d = Download(source=p.source, engine=p.engine, kind=p.kind, status="starting")
+            s.add(d)
+            await s.commit()
+            await s.refresh(d)
 
-    bg.add_task(run_download, d.id, p.source, p.engine, target_dir, p.kind, is_file=False, file_bytes=None)
-    return {"ok": True, "id": d.id}
+        bg.add_task(run_download, d.id, p.source, p.engine, target_dir, p.kind, is_file=False, file_bytes=None)
+        return {"ok": True, "id": d.id}
+    except Exception as e:
+        print(f"Error occured while adding link : \n{e}")
+        return {"ok": False, "id": str(e)}
 
 
 @app.post("/api/add-torrent-file")
@@ -226,25 +233,39 @@ clients = set()
 @app.websocket("/ws")
 async def ws(ws: WebSocket):
     await ws.accept()
-    clients.add(ws)
     try:
         while True:
             await asyncio.sleep(2)
+            items = []
             async with Session() as s:
                 rows = (await s.execute(__import__("sqlalchemy").select(Download))).scalars().all()
-                await ws.send_json(
-                    [
-                        {
-                            "id": r.id,
-                            "progress": r.progress,
-                            "status": r.status,
-                            "engine": r.engine,
-                            "kind": r.kind,
-                        }
-                        for r in rows
-                    ]
-                )
-    except WebSocketDisconnect:
-        clients.discard(ws)
 
+            for r in rows:
+                speed_bps = 0
+                try:
+                    if r.engine == "transmission" and (str(r.source).startswith("magnet:") or (r.note or "") == "torrent-file"):
+                        st = await transmission.get_status(r.engine_id)
+                        if st:
+                            speed_bps = int(st.get("rateDownload") or 0)
+                    else:
+                        # aria2 for everything else (magnets, http/https, torrent file via aria2)
+                        st = await aria2.tell_status(r.engine_id)
+                        res = st.get("result", {}) if isinstance(st, dict) else {}
+                        speed_bps = int(res.get("downloadSpeed") or 0)
+                except Exception:
+                    speed_bps = 0
+
+                items.append({
+                    "id": r.id,
+                    "progress": r.progress,
+                    "status": r.status,
+                    "engine": r.engine,
+                    "kind": r.kind,
+                    "speed_bps": speed_bps,
+                })
+            await ws.send_json(items)
+    except WebSocketDisconnect:
+        return
+    
+    
 

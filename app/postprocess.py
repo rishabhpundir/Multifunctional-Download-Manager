@@ -2,6 +2,9 @@ import os, shutil, requests
 from guessit import guessit
 from subliminal import download_best_subtitles, region, save_subtitles, Video
 from babelfish import Language
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TMDB_KEY = os.getenv("TMDB_API_KEY")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT")

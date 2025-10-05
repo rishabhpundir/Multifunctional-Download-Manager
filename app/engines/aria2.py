@@ -43,7 +43,7 @@ async def tell_status(gid: str):
     async with aiohttp.ClientSession() as s:
         data = _payload(
             "aria2.tellStatus",
-            [gid, ["status", "completedLength", "totalLength", "files", "dir"]],
+            [gid, ["status", "completedLength", "totalLength", "files","dir","downloadSpeed"]],
         )
         async with s.post(ARIA2, json=data) as r:
             return await r.json()

@@ -20,18 +20,18 @@
         </div>
         <div class="col-md-4">
           <select class="form-select" name="engine">
-            <option value="aria2" selected>aria2 (default)</option>
-            <option value="transmission">transmission (for tracker whitelists)</option>
+            <option value="aria2" selected>aria2</option>
+            <option value="transmission">transmission</option>
           </select>
         </div>
         <div class="col-md-4">
           <select class="form-select" name="kind">
-            <option value="movie" selected>Movie</option>
-            <option value="tv">TV</option>
+            <option value="movies" selected>Movie</option>
+            <option value="tvshows">TV</option>
           </select>
         </div>
         <div class="col-md-4">
-          <button class="btn btn-primary w-100" type="submit">Add</button>
+          <button class="btn btn-primary w-100" type="submit">Add Link</button>
         </div>
       </form>
     </div>
@@ -47,8 +47,8 @@
         </div>
         <div class="col-md-4">
           <select class="form-select" name="engine">
-            <option value="aria2" selected>aria2 (default)</option>
-            <option value="transmission">transmission (for tracker whitelists)</option>
+            <option value="aria2" selected>aria2</option>
+            <option value="transmission">transmission</option>
           </select>
         </div>
         <div class="col-md-4">
@@ -58,14 +58,14 @@
           </select>
         </div>
         <div class="col-12">
-          <button class="btn btn-secondary" type="submit">Upload &amp; Add</button>
+          <button class="btn btn-secondary" type="submit">Add Torrent</button>
         </div>
       </form>
     </div>
   </div>
 
   <h5>Queue</h5>
-  <pre id="out" class="mono"></pre>
+  <div id="queue" class="vstack gap-3"></div>
 
 <script>
 const out = document.getElementById('out');
@@ -74,13 +74,14 @@ document.getElementById('f-url').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const fd = new FormData(e.target);
   const payload = Object.fromEntries(fd.entries());
+  console.log(payload);
   const res = await fetch('/api/add', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(payload)
   });
   const j = await res.json();
-  alert(j.ok ? 'Queued!' : ('Failed: ' + (j.error || '')));
+  alert(j.ok ? 'Queued!' : ('Failed: ' (j.error || '')));
 });
 
 document.getElementById('f-torrent').addEventListener('submit', async (e)=>{
@@ -91,11 +92,41 @@ document.getElementById('f-torrent').addEventListener('submit', async (e)=>{
     body: fd
   });
   const j = await res.json();
-  alert(j.ok ? 'Queued (torrent file)!' : ('Failed: ' + (j.error || '')));
+  alert(j.ok ? 'Queued (torrent file)!' : ('Failed: ' (j.error || '')));
 });
 
 const ws = new WebSocket(`ws://${location.host}/ws`);
-ws.onmessage = (ev)=>{ out.textContent = JSON.stringify(JSON.parse(ev.data), null, 2); };
+const queueDiv = document.getElementById('queue');
+function fmtSpeed(bps){
+  const u=['B/s','KB/s','MB/s','GB/s','TB/s'];
+  let i=0,v=Number(bps)||0;
+  while(v>=1024 && i<u.length-1){ v/=1024; i++; }
+  return (i===0? v.toFixed(0): v.toFixed(2))+' '+u[i];
+}
+ws.onmessage = (ev)=>{
+  const data = JSON.parse(ev.data); // [{id,progress,status,engine,kind,speed_bps}]
+  queueDiv.innerHTML = data.map(item=>{
+    const pct = Math.max(0, Math.min(100, Number(item.progress)||0));
+    const speed = fmtSpeed(item.speed_bps);
+    const badgeCls = item.status==='completed' ? 'bg-success' :
+                     item.status==='seeding'   ? 'bg-info'    :
+                     'bg-secondary';
+    return `
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div class="fw-semibold">#${item.id} · ${item.engine} · ${item.kind}</div>
+            <span class="badge ${badgeCls}">${item.status}</span>
+          </div>
+          <div class="progress" style="height:18px;">
+            <div class="progress-bar" role="progressbar" style="width:${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
+              ${pct}% — ${speed}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+};
 </script>
 </body>
 </html>
