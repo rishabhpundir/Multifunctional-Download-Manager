@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Pi5 Media Loader</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style> body{padding:20px} .mono{font-family:ui-monospace,monospace} </style>
+</head>
+<body>
+  <h3>Pi5 Media Loader</h3>
+
+  <!-- Row 1: URL/magnet add -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Add by URL / Magnet</h5>
+      <form id="f-url" class="row g-2">
+        <div class="col-12">
+          <input class="form-control" name="source" placeholder="magnet:... or https://..." required>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" name="engine">
+            <option value="aria2" selected>aria2 (default)</option>
+            <option value="transmission">transmission (for tracker whitelists)</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" name="kind">
+            <option value="movie" selected>Movie</option>
+            <option value="tv">TV</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-primary w-100" type="submit">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Row 2: .torrent upload -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Upload .torrent file</h5>
+      <form id="f-torrent" class="row g-2" enctype="multipart/form-data">
+        <div class="col-md-4">
+          <input class="form-control" type="file" name="torrent" accept=".torrent" required>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" name="engine">
+            <option value="aria2" selected>aria2 (default)</option>
+            <option value="transmission">transmission (for tracker whitelists)</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" name="kind">
+            <option value="movies" selected>Movie</option>
+            <option value="tvshows">TV</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-secondary" type="submit">Upload &amp; Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <h5>Queue</h5>
+  <pre id="out" class="mono"></pre>
+
+<script>
+const out = document.getElementById('out');
+
+document.getElementById('f-url').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const payload = Object.fromEntries(fd.entries());
+  const res = await fetch('/api/add', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const j = await res.json();
+  alert(j.ok ? 'Queued!' : ('Failed: ' + (j.error || '')));
+});
+
+document.getElementById('f-torrent').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const res = await fetch('/api/add-torrent-file', {
+    method:'POST',
+    body: fd
+  });
+  const j = await res.json();
+  alert(j.ok ? 'Queued (torrent file)!' : ('Failed: ' + (j.error || '')));
+});
+
+const ws = new WebSocket(`ws://${location.host}/ws`);
+ws.onmessage = (ev)=>{ out.textContent = JSON.stringify(JSON.parse(ev.data), null, 2); };
+</script>
+</body>
+</html>
+
+
