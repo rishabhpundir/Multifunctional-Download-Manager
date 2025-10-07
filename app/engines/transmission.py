@@ -57,10 +57,24 @@ async def get_status(t_hash: str):
             "torrent-get",
             {
                 "ids": [t_hash],
-                "fields": ["percentDone","isFinished","downloadDir","name","rateDownload"],
+                "fields": ["percentDone","isFinished","downloadDir","name","rateDownload","status"],
             },
         )
         arr = j["arguments"]["torrents"]
         return arr[0] if arr else None
 
+
+async def stop(t_hash: str):
+    async with aiohttp.ClientSession() as s:
+        return await _call(s, "torrent-stop", {"ids": [t_hash]})
+
+
+async def start(t_hash: str):
+    async with aiohttp.ClientSession() as s:
+        return await _call(s, "torrent-start", {"ids": [t_hash]})
+
+
+async def remove(t_hash: str, delete_data: bool = True):
+    async with aiohttp.ClientSession() as s:
+        return await _call(s, "torrent-remove", {"ids": [t_hash], "delete-local-data": delete_data})
 

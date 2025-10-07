@@ -1,4 +1,7 @@
 import aiohttp, os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BASE = os.getenv("JELLYFIN_URL")
 TOKEN = os.getenv("JELLYFIN_TOKEN")

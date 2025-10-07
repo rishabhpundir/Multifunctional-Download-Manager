@@ -52,3 +52,23 @@ async def tell_status(gid: str):
             return await r.json()
 
 
+async def pause(gid: str):
+    async with aiohttp.ClientSession() as s:
+        data = _payload("aria2.pause", [gid])
+        async with s.post(ARIA2, json=data) as r:
+            return await r.json()
+
+
+async def unpause(gid: str):
+    async with aiohttp.ClientSession() as s:
+        data = _payload("aria2.unpause", [gid])
+        async with s.post(ARIA2, json=data) as r:
+            return await r.json()
+
+
+async def remove(gid: str):
+    async with aiohttp.ClientSession() as s:
+        data = _payload("aria2.remove", [gid])
+        async with s.post(ARIA2, json=data) as r:
+            return await r.json()
+

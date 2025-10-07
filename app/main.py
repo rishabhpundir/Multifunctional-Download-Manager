@@ -1,24 +1,27 @@
 import os
-import asyncio
 import glob
-from pathlib import Path
+import shutil
+import asyncio
+
+from dotenv import load_dotenv
+from pydantic import BaseModel, field_validator
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi import (FastAPI, UploadFile, File, Form, Response,
                      WebSocket, WebSocketDisconnect, BackgroundTasks)
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel, field_validator
-from .db import init_db, Session
+
+from . import jellyfin
 from .models import Download
+from .db import init_db, Session
 from .engines import aria2, transmission
 from .postprocess import move_and_enrich
-from . import jellyfin
-from dotenv import load_dotenv
+from .json_response import ISTJSONResponse
 
 load_dotenv()
 
 DOWNLOADS_ROOT = os.getenv("DOWNLOADS_ROOT")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT")
 
-app = FastAPI(title="Pi5 Media Loader")
+app = FastAPI(title="Pi5 Media Loader", default_response_class=ISTJSONResponse)
 
 
 @app.on_event("startup")
@@ -84,7 +87,7 @@ async def add_job(p: AddPayload, bg: BackgroundTasks):
 async def add_torrent_file(
     bg: BackgroundTasks,
     engine: str = Form("aria2"),
-    kind: str = Form("movie"),
+    kind: str = Form("movies"),
     torrent: UploadFile = File(...),
 ):
     """
@@ -167,13 +170,16 @@ async def run_download(did, source, engine, target_dir, kind, is_file: bool, fil
             prog = (cl * 100.0) / tl if tl else 0.0
             state = r.get("status")
             done = state in ("complete", "seeding")
+            paused = (state == "paused")
             save_dir = r.get("dir") or save_dir
+
 
         async with Session() as s:
             d = await s.get(Download, did)
             d.progress = round(prog, 2)
             d.status = (
-                "seeding" if done and (source.startswith("magnet:") or is_file) else
+                "paused"      if 'paused' in locals() and paused else
+                "seeding"     if done and (source.startswith("magnet:") or is_file) else
                 ("downloading" if not done else "completed")
             )
             d.save_path = save_dir
@@ -192,6 +198,10 @@ async def run_download(did, source, engine, target_dir, kind, is_file: bool, fil
     )
     if candidates:
         final_folder = move_and_enrich(candidates[0], kind)
+        async with Session() as s:
+            d = await s.get(Download, did)
+            d.save_path = final_folder
+            await s.commit()
         result = await jellyfin.refresh_library()
         print("Library refreshed!") if result else "Refreshed failed!"
 
@@ -221,20 +231,55 @@ async def delete_content(did: int):
         if not d:
             return {"ok": False, "error": "not found"}
 
-        # try removing organized folder if exists; else the original save dir
-        import shutil
-        if d.save_path and os.path.isdir(d.save_path):
+        # try remove the organized folder first (set in run_download), else engine dir
+        target = d.save_path
+        if target and os.path.isdir(target):
+            shutil.rmtree(target, ignore_errors=True)
+
+        # best-effort: also remove original engine dir if different
+        if target and d.save_path != target and os.path.isdir(d.save_path or ""):
             shutil.rmtree(d.save_path, ignore_errors=True)
 
-        d.status = "deleted"
+        await s.delete(d)
         await s.commit()
 
     result = await jellyfin.refresh_library()
-    return {"ok": result}
+    return {"ok": bool(result)}
 
 
 # Simple broadcast of the queue every 2s
 clients = set()
+
+
+@app.post("/api/control/{did}/{action}")
+async def control_download(did: int, action: str):
+    action = action.lower()  # "pause" | "resume" | "remove"
+    async with Session() as s:
+        d = await s.get(Download, did)
+        if not d or not d.engine_id:
+            return {"ok": False, "error": "not found"}
+
+    try:
+        if d.engine == "transmission" and (str(d.source).startswith("magnet:") or (d.note or "") == "torrent-file"):
+            if action == "pause":  await transmission.stop(d.engine_id)
+            elif action == "resume": await transmission.start(d.engine_id)
+            elif action == "remove": await transmission.remove(d.engine_id, delete_data=False)
+        else:
+            # aria2 for http/https/magnet/torrent-bytes
+            if action == "pause":   await aria2.pause(d.engine_id)
+            elif action == "resume": await aria2.unpause(d.engine_id)
+            elif action == "remove": await aria2.remove(d.engine_id)
+
+        # reflect paused state quickly
+        async with Session() as s:
+            d = await s.get(Download, did)
+            if action == "pause":  d.status = "paused"
+            if action == "resume" and d.status == "paused": d.status = "downloading"
+            await s.commit()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 
 
 @app.websocket("/ws")

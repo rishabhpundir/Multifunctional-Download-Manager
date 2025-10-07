@@ -17,7 +17,7 @@ def _dest_paths(meta, kind, src_path):
     movies_dir = os.path.join(MEDIA_ROOT, "movies")
     tv_dir = os.path.join(MEDIA_ROOT, "tvshows")
 
-    if kind == "movie":
+    if kind == "movies":
         title = meta.get("title") or "Unknown"
         year = meta.get("year")
         title_folder = f"{title} ({year})" if year else title
@@ -69,23 +69,26 @@ def _download_subs(video_path):
     except dp_exc.RegionAlreadyConfigured:
         pass
 
-    # Provider config: only set opensubtitles if creds present
-    provider_configs = {}
-    osu = os.getenv("OPENSUBTITLES_USER")
-    osp = os.getenv("OPENSUBTITLES_PASS")
-    if osu and osp:
-        provider_configs["opensubtitles"] = {"username": osu, "password": osp}
+    try:
+        # Provider config: only set opensubtitles if creds present
+        provider_configs = {}
+        osu = os.getenv("OPENSUBTITLES_USER")
+        osp = os.getenv("OPENSUBTITLES_PASS")
+        if osu and osp:
+            provider_configs["opensubtitles"] = {"username": osu, "password": osp}
 
-    vid = Video.fromname(video_path)
+        vid = Video.fromname(video_path)
 
-    subs = download_best_subtitles(
-        {vid},
-        {Language("eng")},
-        providers=None,               # use default provider list
-        provider_configs=provider_configs
-    )
-    if subs.get(vid):
-        save_subtitles(vid, subs[vid])
+        subs = download_best_subtitles(
+            {vid},
+            {Language("eng")},
+            providers=None,               # use default provider list
+            provider_configs=provider_configs
+        )
+        if subs.get(vid):
+            save_subtitles(vid, subs[vid])
+    except Exception as e:
+        print(f"Error while downloading subtitles: \n{e}")
 
 
 def basic_meta_from_name(path):
@@ -101,9 +104,10 @@ def basic_meta_from_name(path):
 def move_and_enrich(src_path, kind):
     meta = basic_meta_from_name(src_path)
     folder, dest_video, poster_path = _dest_paths(meta, kind, src_path)
+    folder  = folder.rsplit("/", 1)[0] if "tvshows" in folder else folder
     if os.path.abspath(src_path) != os.path.abspath(dest_video):
         shutil.move(src_path, dest_video)
-    _tmdb_poster(meta, poster_path)
+    # _tmdb_poster(meta, poster_path)
     _download_subs(dest_video)
     return folder
 

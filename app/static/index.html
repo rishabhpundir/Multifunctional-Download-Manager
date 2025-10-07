@@ -40,9 +40,9 @@
   <!-- Row 2: .torrent upload -->
   <div class="card mb-3">
     <div class="card-body">
-      <h5 class="card-title">Upload .torrent file</h5>
+      <h5 class="card-title">Upload Torrent File</h5>
       <form id="f-torrent" class="row g-2" enctype="multipart/form-data">
-        <div class="col-md-4">
+        <div class="col-12">
           <input class="form-control" type="file" name="torrent" accept=".torrent" required>
         </div>
         <div class="col-md-4">
@@ -57,8 +57,8 @@
             <option value="tvshows">TV</option>
           </select>
         </div>
-        <div class="col-12">
-          <button class="btn btn-secondary" type="submit">Add Torrent</button>
+        <div class="col-md-4">
+          <button class="btn btn-success w-100" type="submit">Add Torrent</button>
         </div>
       </form>
     </div>
@@ -120,7 +120,7 @@ ws.onmessage = (ev)=>{
     const speed = fmtSpeed(item.speed_bps);
     const badgeCls = item.status==='completed' ? 'bg-success' :
                      item.status==='seeding'   ? 'bg-info'    :
-                     'bg-secondary';
+                     'bg-warning';
 
     const name = item.name || '(name pending)';
     const dt = fmtDT(item.created_at);
@@ -131,6 +131,16 @@ ws.onmessage = (ev)=>{
           <div class="d-flex justify-content-between align-items-center mb-1">
             <div class="fw-semibold">#${item.id} · ${item.engine} · ${item.kind}</div>
             <span class="badge ${badgeCls}">${item.status}</span>
+
+              <div class="ms-2 d-flex gap-2">
+                ${item.status === 'downloading' ? `
+                  <button class="btn btn-sm btn-outline-secondary" data-act="pause" data-id="${item.id}" title="Pause">❚❚</button>
+                ` : item.status === 'paused' ? `
+                  <button class="btn btn-sm btn-outline-primary" data-act="resume" data-id="${item.id}" title="Resume">▶</button>
+                ` : ``}
+                <button class="btn btn-sm btn-outline-danger" data-act="delete" data-id="${item.id}" title="Delete">🗑</button>
+              </div>
+
           </div>
           <div class="small text-muted">${name}</div>                
           <div class="small text-muted">${dt}</div>                  
@@ -144,6 +154,24 @@ ws.onmessage = (ev)=>{
       </div>`;
   }).join('');
 };
+
+queueDiv.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-act]');
+  if(!btn) return;
+  const id = btn.getAttribute('data-id');
+  const act = btn.getAttribute('data-act');
+
+  if(act === 'delete'){
+    // if(!confirm('Delete this item and its folder?')) return;
+    const r = await fetch(`/api/content/${id}`, { method:'DELETE' });
+    const j = await r.json(); if(!j.ok) alert('Delete failed: ' + (j.error||'')); 
+    return;
+  }
+
+  // pause/resume -> POST /api/control/{id}/{action}
+  const r = await fetch(`/api/control/${id}/${act === 'pause' ? 'pause' : 'resume'}`, { method:'POST' });
+  const j = await r.json(); if(!j.ok) alert('Action failed: ' + (j.error||'')); 
+});
 </script>
 </body>
 </html>
