@@ -1,11 +1,9 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
 
-DB_PATH = os.getenv("SQLITE_PATH")
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db.sqlite3")
 engine = create_async_engine(f"sqlite+aiosqlite:///{DB_PATH}", future=True)
 Session = async_sessionmaker(engine, expire_on_commit=False)
 

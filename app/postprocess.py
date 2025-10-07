@@ -2,12 +2,14 @@ import os, shutil, requests
 from guessit import guessit
 from subliminal import download_best_subtitles, region, save_subtitles, Video
 from babelfish import Language
+from dogpile.cache import exception as dp_exc
 from dotenv import load_dotenv
 
 load_dotenv()
 
-TMDB_KEY = os.getenv("TMDB_API_KEY")
+TMDB_API_TOKEN = os.getenv("TMDB_API_TOKEN")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT")
+USE_TMDB = (os.getenv("TMDB_ENABLED", "1").lower() not in ("0","false","no"))
 
 
 def _dest_paths(meta, kind, src_path):
@@ -32,12 +34,22 @@ def _dest_paths(meta, kind, src_path):
 
 
 def _tmdb_poster(meta, poster_path):
-    title, year = meta.get("title"), meta.get("year")
-    if not title or not TMDB_KEY:
+    if not USE_TMDB:
         return
+    title, year = meta.get("title"), meta.get("year")
+    if not title or not TMDB_API_TOKEN:
+        return
+
     url = "https://api.themoviedb.org/3/search/multi"
+
+    headers = {
+        "accept": "application/json",
+        "Authorization": f"Bearer {TMDB_API_TOKEN}"
+    }
+    
+    params = {"query": title, "include_adult": "true"}
     try:
-        r = requests.get(url, params={"api_key": TMDB_KEY, "query": title, "year": year}, timeout=20)
+        r = requests.get(url, headers=headers, params=params, timeout=30)
         j = r.json()
         if not j.get("results"):
             return
@@ -47,14 +59,31 @@ def _tmdb_poster(meta, poster_path):
         img = requests.get(f"https://image.tmdb.org/t/p/w780{poster}", timeout=20).content
         with open(poster_path, "wb") as f:
             f.write(img)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error while getting poster : \n{e}")
 
 
 def _download_subs(video_path):
-    region.configure("dogpile.cache.memory")
+    try:
+        region.configure("dogpile.cache.memory")
+    except dp_exc.RegionAlreadyConfigured:
+        pass
+
+    # Provider config: only set opensubtitles if creds present
+    provider_configs = {}
+    osu = os.getenv("OPENSUBTITLES_USER")
+    osp = os.getenv("OPENSUBTITLES_PASS")
+    if osu and osp:
+        provider_configs["opensubtitles"] = {"username": osu, "password": osp}
+
     vid = Video.fromname(video_path)
-    subs = download_best_subtitles({vid}, {Language("eng")})
+
+    subs = download_best_subtitles(
+        {vid},
+        {Language("eng")},
+        providers=None,               # use default provider list
+        provider_configs=provider_configs
+    )
     if subs.get(vid):
         save_subtitles(vid, subs[vid])
 

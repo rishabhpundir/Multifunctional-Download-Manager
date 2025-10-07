@@ -186,7 +186,8 @@ async def run_download(did, source, engine, target_dir, kind, is_file: bool, fil
     )
     if candidates:
         final_folder = move_and_enrich(candidates[0], kind)
-        await jellyfin.refresh_library()
+        result = await jellyfin.refresh_library()
+        print("Library refreshed!") if result else "Refreshed failed!"
 
 
 @app.get("/api/downloads")
@@ -222,8 +223,8 @@ async def delete_content(did: int):
         d.status = "deleted"
         await s.commit()
 
-    await jellyfin.refresh_library()
-    return {"ok": True}
+    result = await jellyfin.refresh_library()
+    return {"ok": result}
 
 
 # Simple broadcast of the queue every 2s

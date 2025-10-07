@@ -1,6 +1,9 @@
 import aiohttp
 import os
 import base64
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ARIA2 = os.getenv("ARIA2_RPC")
 SECRET = os.getenv("ARIA2_SECRET")
