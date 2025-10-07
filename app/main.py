@@ -2,7 +2,8 @@ import os
 import asyncio
 import glob
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import (FastAPI, UploadFile, File, Form, Response,
+                     WebSocket, WebSocketDisconnect, BackgroundTasks)
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from .db import init_db, Session
@@ -48,6 +49,11 @@ class AddPayload(BaseModel):
         if v not in {"movies", "tvshows"}:
             raise ValueError("kind must be 'movie' or 'tv'")
         return v
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
 
 
 @app.post("/api/add")
@@ -255,14 +261,40 @@ async def ws(ws: WebSocket):
                         speed_bps = int(res.get("downloadSpeed") or 0)
                 except Exception:
                     speed_bps = 0
+                    
+                # display name and timestamp
+                display_name = ""
+                added_ts = getattr(r, "created_at", None)
+
+                try:
+                    if r.engine == "transmission" and (str(r.source).startswith("magnet:") or (r.note or "") == "torrent-file"):
+                        if st:
+                            display_name = (st.get("name") or "").strip()
+                    else:
+                        # aria2
+                        if isinstance(st, dict):
+                            res = st.get("result", {})
+                            files = res.get("files") or []
+                            if files:
+                                p = (files[0].get("path") or "").strip()
+                                if p:
+                                    display_name = os.path.basename(p)
+                except Exception:
+                    pass
+
+                if not display_name:
+                    # fallback to the source itself
+                    display_name = os.path.basename(str(r.source)) or str(r.source)
 
                 items.append({
                     "id": r.id,
+                    "name": display_name,
                     "progress": r.progress,
                     "status": r.status,
                     "engine": r.engine,
                     "kind": r.kind,
                     "speed_bps": speed_bps,
+                    "created_at": (added_ts.isoformat() if added_ts else None),
                 })
             await ws.send_json(items)
     except WebSocketDisconnect:

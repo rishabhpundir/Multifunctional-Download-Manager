@@ -103,14 +103,28 @@ function fmtSpeed(bps){
   while(v>=1024 && i<u.length-1){ v/=1024; i++; }
   return (i===0? v.toFixed(0): v.toFixed(2))+' '+u[i];
 }
+
+function fmtDT(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+
 ws.onmessage = (ev)=>{
-  const data = JSON.parse(ev.data); // [{id,progress,status,engine,kind,speed_bps}]
+  const data = JSON.parse(ev.data);
+  data.sort((a,b) => b.id - a.id);
+
   queueDiv.innerHTML = data.map(item=>{
     const pct = Math.max(0, Math.min(100, Number(item.progress)||0));
     const speed = fmtSpeed(item.speed_bps);
     const badgeCls = item.status==='completed' ? 'bg-success' :
                      item.status==='seeding'   ? 'bg-info'    :
                      'bg-secondary';
+
+    const name = item.name || '(name pending)';
+    const dt = fmtDT(item.created_at);
+
     return `
       <div class="card">
         <div class="card-body">
@@ -118,9 +132,12 @@ ws.onmessage = (ev)=>{
             <div class="fw-semibold">#${item.id} · ${item.engine} · ${item.kind}</div>
             <span class="badge ${badgeCls}">${item.status}</span>
           </div>
+          <div class="small text-muted">${name}</div>                
+          <div class="small text-muted">${dt}</div>                  
+          <div class="small text-muted">${speed} (${item.status})</div> 
           <div class="progress" style="height:18px;">
             <div class="progress-bar" role="progressbar" style="width:${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
-              ${pct}% — ${speed}
+              ${pct}%
             </div>
           </div>
         </div>
