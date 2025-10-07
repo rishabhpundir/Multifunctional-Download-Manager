@@ -134,11 +134,11 @@ ws.onmessage = (ev)=>{
 
               <div class="ms-2 d-flex gap-2">
                 ${item.status === 'downloading' ? `
-                  <button class="btn btn-sm btn-outline-secondary" data-act="pause" data-id="${item.id}" title="Pause">❚❚</button>
+                  <button class="btn btn-sm btn-outline-secondary" data-act="pause" data-id="${item.id}" title="Pause"><i class="fa-solid fa-pause"></i></button>
                 ` : item.status === 'paused' ? `
-                  <button class="btn btn-sm btn-outline-primary" data-act="resume" data-id="${item.id}" title="Resume">▶</button>
+                  <button class="btn btn-sm btn-outline-primary" data-act="resume" data-id="${item.id}" title="Resume"><i class="fa-solid fa-play"></i></button>
                 ` : ``}
-                <button class="btn btn-sm btn-outline-danger" data-act="delete" data-id="${item.id}" title="Delete">🗑</button>
+                <button class="btn btn-sm btn-outline-danger" data-act="delete" data-id="${item.id}" title="Delete"><i class="fa-solid fa-trash"></i></button>
               </div>
 
           </div>
@@ -173,6 +173,7 @@ queueDiv.addEventListener('click', async (e)=>{
   const j = await r.json(); if(!j.ok) alert('Action failed: ' + (j.error||'')); 
 });
 </script>
+<script src="https://kit.fontawesome.com/d05455da28.js" crossorigin="anonymous"></script>
 </body>
 </html>
 
